@@ -31,6 +31,9 @@ const els = {
   recognizeBtn: document.getElementById("recognizeBtn"),
   manualAddBtn: document.getElementById("manualAddBtn"),
   ocrStatus: document.getElementById("ocrStatus"),
+  pasteInput: document.getElementById("pasteInput"),
+  pasteRecognizeBtn: document.getElementById("pasteRecognizeBtn"),
+  clearPasteBtn: document.getElementById("clearPasteBtn"),
   reviewCard: document.getElementById("reviewCard"),
   toggleRawTextBtn: document.getElementById("toggleRawTextBtn"),
   rawText: document.getElementById("rawText"),
@@ -481,6 +484,28 @@ function handleImageSelected(file) {
 }
 
 
+function recognizePastedText() {
+  const text = els.pasteInput.value.trim();
+  if (!text) {
+    setStatus("请先粘贴作业文字。", "error");
+    els.pasteInput.focus();
+    return;
+  }
+
+  const parsed = parseScreenshotText(text);
+  if (!parsed.items.length) {
+    setStatus("未能自动拆分任务，请手动编辑后确认。", "error");
+    openReviewPanel({
+      ...parsed,
+      items: [{ id: crypto.randomUUID(), text, done: false, order: 1 }],
+    });
+    return;
+  }
+
+  openReviewPanel(parsed);
+  setStatus(`识别完成，共找到 ${parsed.items.length} 条任务，请确认后加入清单。`, "success");
+}
+
 function confirmReview() {
   const items = reviewDraftItems
     .map((item, index) => ({
@@ -505,6 +530,7 @@ function confirmReview() {
   setTodayGroups([...getTodayGroups(), group]);
   closeReviewPanel();
   resetImageSelection();
+  els.pasteInput.value = "";
   renderAll();
   setStatus("已加入今日清单。", "success");
 }
@@ -521,6 +547,12 @@ bindImageInput(els.cameraInput);
 
 els.clearImageBtn.addEventListener("click", resetImageSelection);
 els.recognizeBtn.addEventListener("click", recognizeImage);
+
+els.pasteRecognizeBtn.addEventListener("click", recognizePastedText);
+els.clearPasteBtn.addEventListener("click", () => {
+  els.pasteInput.value = "";
+  els.pasteInput.focus();
+});
 
 els.manualAddBtn.addEventListener("click", () => {
   openReviewPanel({ teacher: "", subject: "", items: [], rawText: "" });

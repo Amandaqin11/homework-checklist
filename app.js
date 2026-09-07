@@ -2,22 +2,20 @@ import { parseScreenshotText, createGroup } from "./parser.js";
 import { downloadWordDocument } from "./export-word.js";
 
 const STORAGE_KEY = "homework-checklist-data-v1";
-
-const OCR_CONFIG = {
-  workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js",
-  corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core-lstm.wasm.js",
-  langPath: "https://cdn.jsdelivr.net/npm/@tesseract.js-data/chi_sim/4.0.0_best_int",
-};
+const OCR_TIMEOUT_MS = 90000;
 
 const OCR_STATUS_LABELS = {
   "loading tesseract core": "正在加载识别引擎",
   "initializing tesseract": "正在初始化引擎",
-  "loading language traineddata": "正在下载中文模型（首次约 15MB，请耐心等待）",
+  "loading language traineddata": "正在加载中文模型",
   "initializing api": "正在准备识别",
   "recognizing text": "正在识别文字",
 };
 
+let ocrWorker = null;
 let ocrWorkerPromise = null;
+let waitTimerId = null;
+let waitStartedAt = 0;
 
 const els = {
   todayLabel: document.getElementById("todayLabel"),
@@ -99,15 +97,80 @@ function setStatus(message, type = "") {
   els.ocrStatus.className = `status-text${type ? ` ${type}` : ""}`;
 }
 
+function getLangPath() {
+  return new URL("tessdata", window.location.href).href.replace(/\/$/, "");
+}
+
+function getOcrConfig() {
+  return {
+    workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js",
+    corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core-lstm.wasm.js",
+    langPath: getLangPath(),
+    gzip: true,
+  };
+}
+
+function startWaitTimer(prefix) {
+  stopWaitTimer();
+  waitStartedAt = Date.now();
+  waitTimerId = window.setInterval(() => {
+    const seconds = Math.floor((Date.now() - waitStartedAt) / 1000);
+    setStatus(`${prefix}（已等待 ${seconds} 秒）`);
+  }, 1000);
+}
+
+function stopWaitTimer() {
+  if (waitTimerId) {
+    window.clearInterval(waitTimerId);
+    waitTimerId = null;
+  }
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    }),
+  ]);
+}
+
 function handleOcrLogger(message) {
-  const label = OCR_STATUS_LABELS[message.status] || "正在识别，请稍候";
-  const progressStatuses = ["recognizing text", "loading language traineddata", "loading tesseract core"];
-  if (progressStatuses.includes(message.status) && typeof message.progress === "number") {
+  const label = OCR_STATUS_LABELS[message.status] || "正在处理";
+  if (typeof message.progress === "number") {
     const percent = Math.round(message.progress * 100);
+    stopWaitTimer();
     setStatus(`${label}… ${percent}%`);
     return;
   }
+  stopWaitTimer();
   setStatus(`${label}…`);
+}
+
+function resetOcrWorker() {
+  if (ocrWorker) {
+    ocrWorker.terminate().catch(() => {});
+    ocrWorker = null;
+  }
+  ocrWorkerPromise = null;
+}
+
+async function createOcrWorker() {
+  ocrWorker = await Tesseract.createWorker("chi_sim", 1, {
+    ...getOcrConfig(),
+    logger: handleOcrLogger,
+  });
+  return ocrWorker;
+}
+
+function getOcrWorker() {
+  if (!ocrWorkerPromise) {
+    ocrWorkerPromise = createOcrWorker().catch((error) => {
+      resetOcrWorker();
+      throw error;
+    });
+  }
+  return ocrWorkerPromise;
 }
 
 async function prepareImageForOcr(file) {
@@ -140,21 +203,54 @@ async function prepareImageForOcr(file) {
   }
 }
 
-function getOcrWorker() {
-  if (!ocrWorkerPromise) {
-    ocrWorkerPromise = Tesseract.createWorker("chi_sim", 1, {
-      ...OCR_CONFIG,
-      logger: handleOcrLogger,
-    }).catch((error) => {
-      ocrWorkerPromise = null;
-      throw error;
-    });
-  }
-  return ocrWorkerPromise;
-}
 
-function preloadOcrWorker() {
-  return getOcrWorker();
+async function recognizeImage() {
+  if (!selectedImageFile) {
+    setStatus("请先选择一张截图。", "error");
+    return;
+  }
+
+  els.recognizeBtn.disabled = true;
+  startWaitTimer("① 正在压缩图片");
+
+  try {
+    const imageBlob = await prepareImageForOcr(selectedImageFile);
+    startWaitTimer("② 正在加载识别模型");
+    const worker = await withTimeout(
+      getOcrWorker(),
+      OCR_TIMEOUT_MS,
+      "识别模型加载超时，请刷新页面后重试"
+    );
+
+    startWaitTimer("③ 正在识别文字");
+    const result = await withTimeout(
+      worker.recognize(imageBlob),
+      OCR_TIMEOUT_MS,
+      "识别超时，请换 WiFi 或改用手动添加"
+    );
+
+    stopWaitTimer();
+    const text = result.data.text?.trim();
+
+    if (!text) {
+      setStatus("没有识别到文字，请换一张更清晰的截图，或改用手动添加。", "error");
+      openReviewPanel({ teacher: "", subject: "", items: [], rawText: "" });
+      return;
+    }
+
+    const parsed = parseScreenshotText(text);
+    openReviewPanel(parsed);
+    setStatus(`识别完成，共找到 ${parsed.items.length} 条任务，请确认后加入清单。`, "success");
+  } catch (error) {
+    console.error(error);
+    stopWaitTimer();
+    resetOcrWorker();
+    const message = error?.message || "识别失败";
+    setStatus(`${message}。可改用手动添加。`, "error");
+  } finally {
+    stopWaitTimer();
+    els.recognizeBtn.disabled = false;
+  }
 }
 
 function updateProgress(groups) {
@@ -384,40 +480,6 @@ function handleImageSelected(file) {
   setStatus("图片已准备好，点击“识别文字”开始。");
 }
 
-async function recognizeImage() {
-  if (!selectedImageFile) {
-    setStatus("请先选择一张截图。", "error");
-    return;
-  }
-
-  els.recognizeBtn.disabled = true;
-  setStatus("正在压缩图片…");
-
-  try {
-    const imageBlob = await prepareImageForOcr(selectedImageFile);
-    setStatus("正在加载识别引擎（首次使用需下载模型，请稍候）…");
-
-    const worker = await getOcrWorker();
-    const result = await worker.recognize(imageBlob);
-    const text = result.data.text?.trim();
-
-    if (!text) {
-      setStatus("没有识别到文字，请换一张更清晰的截图，或改用手动添加。", "error");
-      openReviewPanel({ teacher: "", subject: "", items: [], rawText: "" });
-      return;
-    }
-
-    const parsed = parseScreenshotText(text);
-    openReviewPanel(parsed);
-    setStatus(`识别完成，共找到 ${parsed.items.length} 条任务，请确认后加入清单。`, "success");
-  } catch (error) {
-    console.error(error);
-    ocrWorkerPromise = null;
-    setStatus("识别失败：可能是网络较慢或模型下载未完成，请换 WiFi 后重试。", "error");
-  } finally {
-    els.recognizeBtn.disabled = false;
-  }
-}
 
 function confirmReview() {
   const items = reviewDraftItems
@@ -501,6 +563,3 @@ els.clearHistoryBtn.addEventListener("click", () => {
 });
 
 renderAll();
-preloadOcrWorker().catch(() => {
-  // 首次预加载失败时不打扰用户，点击识别时会再试一次
-});

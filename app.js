@@ -3,6 +3,22 @@ import { downloadWordDocument } from "./export-word.js";
 
 const STORAGE_KEY = "homework-checklist-data-v1";
 
+const OCR_CONFIG = {
+  workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js",
+  corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core-lstm.wasm.js",
+  langPath: "https://cdn.jsdelivr.net/npm/@tesseract.js-data/chi_sim/4.0.0_best_int",
+};
+
+const OCR_STATUS_LABELS = {
+  "loading tesseract core": "正在加载识别引擎",
+  "initializing tesseract": "正在初始化引擎",
+  "loading language traineddata": "正在下载中文模型（首次约 15MB，请耐心等待）",
+  "initializing api": "正在准备识别",
+  "recognizing text": "正在识别文字",
+};
+
+let ocrWorkerPromise = null;
+
 const els = {
   todayLabel: document.getElementById("todayLabel"),
   progressCard: document.getElementById("progressCard"),
@@ -81,6 +97,64 @@ function setTodayGroups(groups) {
 function setStatus(message, type = "") {
   els.ocrStatus.textContent = message;
   els.ocrStatus.className = `status-text${type ? ` ${type}` : ""}`;
+}
+
+function handleOcrLogger(message) {
+  const label = OCR_STATUS_LABELS[message.status] || "正在识别，请稍候";
+  const progressStatuses = ["recognizing text", "loading language traineddata", "loading tesseract core"];
+  if (progressStatuses.includes(message.status) && typeof message.progress === "number") {
+    const percent = Math.round(message.progress * 100);
+    setStatus(`${label}… ${percent}%`);
+    return;
+  }
+  setStatus(`${label}…`);
+}
+
+async function prepareImageForOcr(file) {
+  const imageUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = imageUrl;
+    });
+
+    const maxWidth = 1280;
+    const scale = Math.min(1, maxWidth / image.width);
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext("2d").drawImage(image, 0, 0, width, height);
+
+    const blob = await new Promise((resolve) => {
+      canvas.toBlob((result) => resolve(result || file), "image/jpeg", 0.9);
+    });
+
+    return blob;
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
+
+function getOcrWorker() {
+  if (!ocrWorkerPromise) {
+    ocrWorkerPromise = Tesseract.createWorker("chi_sim", 1, {
+      ...OCR_CONFIG,
+      logger: handleOcrLogger,
+    }).catch((error) => {
+      ocrWorkerPromise = null;
+      throw error;
+    });
+  }
+  return ocrWorkerPromise;
+}
+
+function preloadOcrWorker() {
+  return getOcrWorker();
 }
 
 function updateProgress(groups) {
@@ -317,19 +391,16 @@ async function recognizeImage() {
   }
 
   els.recognizeBtn.disabled = true;
-  setStatus("正在识别，请稍候…");
+  setStatus("正在压缩图片…");
 
   try {
-    const result = await Tesseract.recognize(selectedImageFile, "chi_sim+eng", {
-      logger: (message) => {
-        if (message.status === "recognizing text") {
-          const percent = Math.round((message.progress || 0) * 100);
-          setStatus(`正在识别… ${percent}%`);
-        }
-      },
-    });
+    const imageBlob = await prepareImageForOcr(selectedImageFile);
+    setStatus("正在加载识别引擎（首次使用需下载模型，请稍候）…");
 
+    const worker = await getOcrWorker();
+    const result = await worker.recognize(imageBlob);
     const text = result.data.text?.trim();
+
     if (!text) {
       setStatus("没有识别到文字，请换一张更清晰的截图，或改用手动添加。", "error");
       openReviewPanel({ teacher: "", subject: "", items: [], rawText: "" });
@@ -341,7 +412,8 @@ async function recognizeImage() {
     setStatus(`识别完成，共找到 ${parsed.items.length} 条任务，请确认后加入清单。`, "success");
   } catch (error) {
     console.error(error);
-    setStatus("识别失败，请重试或改用手动添加。", "error");
+    ocrWorkerPromise = null;
+    setStatus("识别失败：可能是网络较慢或模型下载未完成，请换 WiFi 后重试。", "error");
   } finally {
     els.recognizeBtn.disabled = false;
   }
@@ -429,3 +501,6 @@ els.clearHistoryBtn.addEventListener("click", () => {
 });
 
 renderAll();
+preloadOcrWorker().catch(() => {
+  // 首次预加载失败时不打扰用户，点击识别时会再试一次
+});

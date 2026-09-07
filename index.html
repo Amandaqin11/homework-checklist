@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#2563eb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="作业清单">
+  <title>作业清单</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div>
+        <h1>作业清单</h1>
+        <p class="subtitle">截图识别 · 勾选完成 · 导出打印</p>
+      </div>
+      <div class="date-badge" id="todayLabel"></div>
+    </header>
+
+    <section class="card progress-card" id="progressCard" hidden>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <p id="progressText">已完成 0 / 0</p>
+    </section>
+
+    <section class="card">
+      <h2>添加任务截图</h2>
+      <label class="upload-area" id="uploadArea">
+        <input type="file" id="imageInput" accept="image/*" capture="environment" hidden>
+        <span class="upload-icon">📷</span>
+        <span class="upload-title">点击选择或拍摄截图</span>
+        <span class="upload-hint">支持 JPG、PNG，也可从相册选取</span>
+      </label>
+      <div class="preview-wrap" id="previewWrap" hidden>
+        <img id="previewImage" alt="截图预览">
+        <button type="button" class="btn btn-secondary btn-sm" id="clearImageBtn">重新选图</button>
+      </div>
+      <div class="action-row">
+        <button type="button" class="btn btn-primary" id="recognizeBtn" disabled>识别文字</button>
+        <button type="button" class="btn btn-secondary" id="manualAddBtn">手动添加</button>
+      </div>
+      <p class="status-text" id="ocrStatus"></p>
+    </section>
+
+    <section class="card" id="reviewCard" hidden>
+      <div class="card-header">
+        <h2>确认识别结果</h2>
+        <button type="button" class="btn btn-link" id="toggleRawTextBtn">查看原文</button>
+      </div>
+      <pre class="raw-text" id="rawText" hidden></pre>
+      <div class="form-grid">
+        <label>
+          老师
+          <input type="text" id="teacherInput" placeholder="例如：王老师">
+        </label>
+        <label>
+          科目
+          <input type="text" id="subjectInput" placeholder="例如：语文">
+        </label>
+      </div>
+      <p class="review-tip">识别结果已自动合并换行。条目不对可直接改，或点删除去掉。</p>
+      <div id="reviewItems"></div>
+      <button type="button" class="btn btn-secondary btn-block" id="addReviewItemBtn">+ 添加一条</button>
+      <div class="action-row">
+        <button type="button" class="btn btn-secondary" id="cancelReviewBtn">取消</button>
+        <button type="button" class="btn btn-primary" id="confirmReviewBtn">加入今日清单</button>
+      </div>
+    </section>
+
+    <section class="card" id="checklistCard">
+      <div class="card-header">
+        <h2>今日清单</h2>
+        <div class="header-actions">
+          <button type="button" class="btn btn-secondary btn-sm" id="exportWordBtn">导出 Word</button>
+        </div>
+      </div>
+      <div id="checklistEmpty" class="empty-state">
+        <p>还没有任务</p>
+        <p class="muted">上传老师布置的作业截图，或手动添加</p>
+      </div>
+      <div id="checklistGroups"></div>
+    </section>
+
+    <section class="card" id="historyCard">
+      <div class="card-header">
+        <h2>历史记录</h2>
+        <button type="button" class="btn btn-link" id="clearHistoryBtn">清空</button>
+      </div>
+      <div id="historyList" class="history-list"></div>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

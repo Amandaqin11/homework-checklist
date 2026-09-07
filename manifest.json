@@ -1,0 +1,10 @@
+{
+  "name": "作业清单",
+  "short_name": "作业清单",
+  "description": "截图识别老师作业，生成可勾选清单并导出 Word 打印",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f3f6fb",
+  "theme_color": "#2563eb",
+  "lang": "zh-CN"
+}

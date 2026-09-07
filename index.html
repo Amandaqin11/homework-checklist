@@ -27,12 +27,21 @@
 
     <section class="card">
       <h2>添加任务截图</h2>
-      <label class="upload-area" id="uploadArea">
-        <input type="file" id="imageInput" accept="image/*" capture="environment" hidden>
+      <div class="upload-area" id="uploadArea">
         <span class="upload-icon">📷</span>
-        <span class="upload-title">点击选择或拍摄截图</span>
-        <span class="upload-hint">支持 JPG、PNG，也可从相册选取</span>
-      </label>
+        <span class="upload-title">添加作业截图</span>
+        <span class="upload-hint">手机请优先点「从相册选择」</span>
+        <div class="upload-actions">
+          <label class="btn btn-primary upload-btn">
+            从相册选择
+            <input type="file" id="imageInput" accept="image/*" hidden>
+          </label>
+          <label class="btn btn-secondary upload-btn">
+            拍照
+            <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+          </label>
+        </div>
+      </div>
       <div class="preview-wrap" id="previewWrap" hidden>
         <img id="previewImage" alt="截图预览">
         <button type="button" class="btn btn-secondary btn-sm" id="clearImageBtn">重新选图</button>

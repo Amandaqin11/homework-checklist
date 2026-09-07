@@ -95,15 +95,21 @@ body {
   border: 2px dashed #bfdbfe;
   border-radius: 16px;
   background: #f8fbff;
-  cursor: pointer;
   text-align: center;
   padding: 20px;
-  transition: border-color 0.2s, background 0.2s;
 }
 
-.upload-area:hover {
-  border-color: var(--primary);
-  background: #eff6ff;
+.upload-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.upload-btn {
+  cursor: pointer;
+  margin: 0;
 }
 
 .upload-icon {

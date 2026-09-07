@@ -9,6 +9,7 @@ const els = {
   progressFill: document.getElementById("progressFill"),
   progressText: document.getElementById("progressText"),
   imageInput: document.getElementById("imageInput"),
+  cameraInput: document.getElementById("cameraInput"),
   uploadArea: document.getElementById("uploadArea"),
   previewWrap: document.getElementById("previewWrap"),
   previewImage: document.getElementById("previewImage"),
@@ -290,6 +291,7 @@ function renderAll() {
 function resetImageSelection() {
   selectedImageFile = null;
   els.imageInput.value = "";
+  els.cameraInput.value = "";
   els.previewWrap.hidden = true;
   els.previewImage.removeAttribute("src");
   els.recognizeBtn.disabled = true;
@@ -373,10 +375,15 @@ function confirmReview() {
   setStatus("已加入今日清单。", "success");
 }
 
-els.imageInput.addEventListener("change", (event) => {
-  const file = event.target.files?.[0];
-  handleImageSelected(file);
-});
+function bindImageInput(input) {
+  input.addEventListener("change", (event) => {
+    const file = event.target.files?.[0];
+    handleImageSelected(file);
+  });
+}
+
+bindImageInput(els.imageInput);
+bindImageInput(els.cameraInput);
 
 els.clearImageBtn.addEventListener("click", resetImageSelection);
 els.recognizeBtn.addEventListener("click", recognizeImage);

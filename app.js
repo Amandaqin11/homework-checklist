@@ -163,17 +163,27 @@ async function createOcrWorker() {
     ...getOcrConfig(),
     logger: handleOcrLogger,
   });
+  await ocrWorker.setParameters({
+    tessedit_pageseg_mode: "6",
+    preserve_interword_spaces: "1",
+  });
   return ocrWorker;
 }
 
-function getOcrWorker() {
-  if (!ocrWorkerPromise) {
-    ocrWorkerPromise = createOcrWorker().catch((error) => {
-      resetOcrWorker();
-      throw error;
-    });
+function enhanceImageForOcr(ctx, width, height) {
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const { data } = imageData;
+  const contrast = 1.35;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+    const enhanced = Math.min(255, Math.max(0, (gray - 128) * contrast + 128));
+    data[i] = enhanced;
+    data[i + 1] = enhanced;
+    data[i + 2] = enhanced;
   }
-  return ocrWorkerPromise;
+
+  ctx.putImageData(imageData, 0, 0);
 }
 
 async function prepareImageForOcr(file) {
@@ -186,24 +196,44 @@ async function prepareImageForOcr(file) {
       img.src = imageUrl;
     });
 
-    const maxWidth = 1280;
-    const scale = Math.min(1, maxWidth / image.width);
+    const minWidth = 1600;
+    const maxWidth = 2400;
+    let targetWidth = image.width;
+    if (targetWidth < minWidth) {
+      targetWidth = minWidth;
+    } else if (targetWidth > maxWidth) {
+      targetWidth = maxWidth;
+    }
+
+    const scale = targetWidth / image.width;
     const width = Math.max(1, Math.round(image.width * scale));
     const height = Math.max(1, Math.round(image.height * scale));
 
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
-    canvas.getContext("2d").drawImage(image, 0, 0, width, height);
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.filter = "contrast(1.08)";
+    ctx.drawImage(image, 0, 0, width, height);
+    enhanceImageForOcr(ctx, width, height);
 
     const blob = await new Promise((resolve) => {
-      canvas.toBlob((result) => resolve(result || file), "image/jpeg", 0.9);
+      canvas.toBlob((result) => resolve(result || file), "image/png");
     });
 
     return blob;
   } finally {
     URL.revokeObjectURL(imageUrl);
   }
+}
+function getOcrWorker() {
+  if (!ocrWorkerPromise) {
+    ocrWorkerPromise = createOcrWorker().catch((error) => {
+      resetOcrWorker();
+      throw error;
+    });
+  }
+  return ocrWorkerPromise;
 }
 
 

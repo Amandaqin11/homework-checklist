@@ -1,3 +1,5 @@
+import { fixRecognizedText, fixTaskText } from "./ocr-fix.js";
+
 const TEACHER_PATTERNS = [
   /([\u4e00-\u9fa5A-Za-z·]{2,8})(老师|师)[：:\s]/,
   /([\u4e00-\u9fa5A-Za-z·]{2,8})老师/,
@@ -35,14 +37,17 @@ const FOOTER_LINES = [
 
 const ITEM_START = /^[\s*•\-·]*(?:(?:第)?(\d+|[①②③④⑤⑥⑦⑧⑨⑩])[\.、．\)\]），,、]\s*|每人必交[:：；]?)/;
 const INLINE_ITEM_SPLIT = /(?<=[。！？；])\s*(?=\d+[\.、．，,、]?)/;
+
 function normalizeText(text) {
-  return text
-    .replace(/\r/g, "\n")
-    .replace(/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/gu, "")
-    .replace(/[;；]\s*/g, "，")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  return fixRecognizedText(
+    text
+      .replace(/\r/g, "\n")
+      .replace(/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/gu, "")
+      .replace(/[;；]\s*/g, "，")
+      .replace(/[ \t]+/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+  );
 }
 
 function cleanLine(line) {
@@ -181,7 +186,7 @@ export function parseTasks(text) {
     if (parsed && parsed.text.length >= 2) {
       items.push({
         id: crypto.randomUUID(),
-        text: parsed.text,
+        text: fixTaskText(parsed.text),
         done: false,
         order: parsed.index ?? items.length + 1,
       });
@@ -191,7 +196,7 @@ export function parseTasks(text) {
     if (line.length >= 4) {
       items.push({
         id: crypto.randomUUID(),
-        text: line,
+        text: fixTaskText(line),
         done: false,
         order: items.length + 1,
       });

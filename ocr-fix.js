@@ -6,6 +6,8 @@ const FOOTER_PATTERNS = [
   /!\(VS\)\/[\s\S]*$/u,
   /[/／\\]名名名[\s\S]*$/u,
   /名名名[\s\S]*$/u,
+  /[‼!！]*回执要求[‼!！]*[\s\S]*$/u,
+  /回执要求[‼!！]*[\s\S]*$/u,
 ];
 
 const OCR_REPLACEMENTS = [
@@ -22,6 +24,13 @@ const OCR_REPLACEMENTS = [
   [/口算加油卷/g, "口算加油卷"],
   [/练习册p(\d+)/gi, "练习册P$1"],
   [/练习册P(\d+)/g, "练习册P$1"],
+  [/至少(\d+)志/g, "至少$1遍"],
+  [/(\d+)志[，,]/g, "$1遍，"],
+  [/预习没完(?!成)/g, "预习没完成"],
+  [/带好办法/g, "有什么好办法"],
+  [/[:：]11\./g, "：1."],
+  [/[:：]1(\d)\.(?=熟|预|准|完|背|写|订|抄|读|复|记|默)/g, "：$1."],
+  [/准备默写1回执/g, "准备默写"],
   [/名名名/g, ""],
   [/[\u0000-\u001f]/g, ""],
   [/[|｜]{2,}/g, ""],
@@ -50,5 +59,8 @@ export function fixTaskText(text) {
   for (const pattern of FOOTER_PATTERNS) {
     fixed = fixed.replace(pattern, "");
   }
-  return fixed.trim();
+  return fixed
+    .replace(/^([\u4e00-\u9fa5]{2,4})作业[:：]\s*/u, "")
+    .replace(/^(\d+[\.、．、]\s*)/, "")
+    .trim();
 }

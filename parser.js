@@ -10,7 +10,7 @@ const SUBJECT_HINTS = [
   "政治", "道德与法治", "科学", "音乐", "美术", "体育", "信息技术",
 ];
 
-const NUMBERED_ITEM = /^[\s*•\-·]*(?:第)?(\d+|[①②③④⑤⑥⑦⑧⑨⑩])[\.、．\)\]），,、]?\s*(.+)$/;
+const NUMBERED_ITEM = /^[\s*•\-·\-－—]*(?:第)?(\d+|[①②③④⑤⑥⑦⑧⑨⑩])[\.、．\)\]），,、]?\s*(.+)$/;
 const BULLET_ITEM = /^[\s*•\-·●○▪▫◦]\s*(.+)$/;
 
 const CIRCLE_NUMBERS = {
@@ -33,10 +33,13 @@ const FOOTER_LINES = [
   /^良好的开端/,
   /^孩子们[，,]/,
   /^我们.+一起加油/,
+  /^[‼!！]*回执要求/,
+  /^回执要求/,
 ];
 
-const ITEM_START = /^[\s*•\-·]*(?:(?:第)?(\d+|[①②③④⑤⑥⑦⑧⑨⑩])[\.、．\)\]），,、]\s*|每人必交[:：；]?)/;
-const INLINE_ITEM_SPLIT = /(?<=[。！？；])\s*(?=\d+[\.、．，,、]?)/;
+const SUBJECT_HEADER = /^[@＠]?所有家长[，,：:\s]*|^([\u4e00-\u9fa5]{2,4})作业[:：]\s*|^作业[:：]\s*/u;
+const ITEM_START = /^[\s*•\-·\-－—]*(?:(?:第)?(\d+|[①②③④⑤⑥⑦⑧⑨⑩])[\.、．\)\]），,、]\s*|每人必交[:：；]?)/;
+const INLINE_ITEM_SPLIT = /(?<=[。！？；])\s*(?=[-－—]?\d+[\.、．，,、])|(?<=[\u4e00-\u9fa5])[-－—](?=\d+[\.、．，,、])|(?<=[；,，])\s*(?=[-－—]?\d+[\.、．，,、])/;
 
 function normalizeText(text) {
   return fixRecognizedText(
@@ -101,12 +104,13 @@ function splitInlineNumberedBlocks(blocks) {
   const result = [];
 
   for (const block of blocks) {
-    const parts = block
+    const cleaned = block.replace(SUBJECT_HEADER, "").trim() || block.trim();
+    const parts = cleaned
       .split(INLINE_ITEM_SPLIT)
       .map((part) => part.trim())
       .filter(Boolean);
 
-    result.push(...(parts.length > 1 ? parts : [block]));
+    result.push(...(parts.length > 1 ? parts : [cleaned]));
   }
 
   return result;
@@ -134,6 +138,17 @@ export function detectTeacher(text) {
 }
 
 export function detectSubject(text, teacher) {
+  for (const subject of SUBJECT_HINTS) {
+    if (text.includes(`${subject}作业`)) {
+      return subject;
+    }
+  }
+
+  const headerMatch = text.match(/(?:^|[\n@＠，,\s])([\u4e00-\u9fa5]{2,4})作业[:：]/);
+  if (headerMatch && SUBJECT_HINTS.includes(headerMatch[1])) {
+    return headerMatch[1];
+  }
+
   for (const subject of SUBJECT_HINTS) {
     if (text.includes(subject)) {
       return subject;
